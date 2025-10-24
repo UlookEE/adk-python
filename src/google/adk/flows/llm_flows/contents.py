@@ -695,7 +695,7 @@ async def _add_instructions_to_user_content(
 
   if llm_request.contents:
     for i in range(len(llm_request.contents) - 1, -1, -1):
-      if llm_request.contents[i].role != 'user':
+      if _is_valid_instruction_position(llm_request, i):
         insert_index = i + 1
         break
       elif i == 0:
@@ -708,3 +708,26 @@ async def _add_instructions_to_user_content(
 
   # Insert all instruction contents at the proper position using efficient slicing
   llm_request.contents[insert_index:insert_index] = instruction_contents
+
+def _is_valid_instruction_position(llm_request: LlmRequest, index: int) -> bool:
+  """Check if a position is valid for inserting instructions.
+  
+  Instructions should not be inserted before:
+  - User content
+  - Function call content
+  
+  Args:
+    llm_request: The LLM request containing contents
+    index: The index to check
+    
+  Returns:
+    True if this is a valid position to insert after, False otherwise
+  """
+  user_message = llm_request.contents[index].role == 'user'
+  tool_request = False
+  for part in llm_request.contents[index].parts:
+    if part.function_call:
+      tool_request = True
+      break
+  
+  return not user_message and not tool_request

@@ -427,3 +427,103 @@ async def test_events_with_empty_content_are_skipped():
       types.UserContent("Hello"),
       types.UserContent("How are you?"),
   ]
+
+
+@pytest.mark.asyncio
+async def test_add_instructions_skips_function_call_position():
+  """Test that instructions are not inserted before function_call content."""
+  agent = Agent(model="gemini-2.5-flash", name="test_agent")
+  invocation_context = await testing_utils.create_invocation_context(
+      agent=agent
+  )
+
+  # Create instruction contents to be inserted
+  instruction_contents = [
+      types.Content(
+          parts=[types.Part(text="System instruction")], role="user"
+      )
+  ]
+
+  # Create llm_request with 5 contents including function_call in the middle
+  llm_request = LlmRequest(model="gemini-2.5-flash")
+  llm_request.contents = [
+      types.UserContent("First user message"),
+      types.ModelContent("Model response"),
+      types.ModelContent(
+          [types.Part(function_call=types.FunctionCall(
+              id="fc_123",
+              name="test_tool",
+              args={"param": "value"}
+          ))]
+      ),
+      types.Content(
+          parts=[types.Part(function_response=types.FunctionResponse(
+              id="fc_123",
+              name="test_tool",
+              response={"result": "success"}
+          ))],
+          role="user"
+      ),
+      types.UserContent("Final user message"),
+  ]
+
+  # Call the function
+  await contents._add_instructions_to_user_content(
+      invocation_context, llm_request, instruction_contents
+  )
+
+  # Verify instructions are inserted after model content (not before function_call)
+  # The function walks backwards and finds the first valid position (model content
+  # without function_call), which is index 1, so it inserts at index 2
+  assert len(llm_request.contents) == 6
+  assert llm_request.contents[0] == types.UserContent("First user message")
+  assert llm_request.contents[1] == types.ModelContent("Model response")
+  # Instruction should be inserted at position 2 (after model response)
+  assert llm_request.contents[2].parts[0].text == "System instruction"
+  # Function call should be pushed to position 3
+  assert llm_request.contents[3].parts[0].function_call is not None
+  # Function response should be pushed to position 4
+  assert llm_request.contents[4].parts[0].function_response is not None
+  # Final user message should be pushed to position 5
+  assert llm_request.contents[5] == types.UserContent("Final user message")
+
+
+@pytest.mark.asyncio
+async def test_add_instructions_skips_leading_user_content():
+  """Test that instructions are not inserted before leading user content."""
+  agent = Agent(model="gemini-2.5-flash", name="test_agent")
+  invocation_context = await testing_utils.create_invocation_context(
+      agent=agent
+  )
+
+  # Create instruction contents to be inserted
+  instruction_contents = [
+      types.Content(
+          parts=[types.Part(text="System instruction")], role="user"
+      )
+  ]
+
+  # Create llm_request with 5 contents starting with user messages
+  llm_request = LlmRequest(model="gemini-2.5-flash")
+  llm_request.contents = [
+      types.UserContent("First user message"),
+      types.UserContent("Second user message"),
+      types.ModelContent("Model response"),
+      types.UserContent("Third user message"),
+      types.UserContent("Fourth user message"),
+  ]
+
+  # Call the function
+  await contents._add_instructions_to_user_content(
+      invocation_context, llm_request, instruction_contents
+  )
+
+  # Verify instructions are inserted after model content, not at the beginning
+  assert len(llm_request.contents) == 6
+  assert llm_request.contents[0] == types.UserContent("First user message")
+  assert llm_request.contents[1] == types.UserContent("Second user message")
+  assert llm_request.contents[2] == types.ModelContent("Model response")
+  # Instruction should be inserted at position 3 (after model content)
+  assert llm_request.contents[3].parts[0].text == "System instruction"
+  assert llm_request.contents[4] == types.UserContent("Third user message")
+  assert llm_request.contents[5] == types.UserContent("Fourth user message")
