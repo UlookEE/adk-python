@@ -233,8 +233,7 @@ async def test_filter_with_higher_remove_amount():
       callback_context=Mock(spec=CallbackContext), llm_request=llm_request
   )
 
-  # With num_invocations_to_keep=3 and remove_amount=2, keeps last 2 invocations
-  # (num_invocations_to_keep - remove_amount = 1, but the calculation keeps 2)
+  # With num_invocations_to_keep=3 and remove_amount=2, keeps last 3 invocations
   assert len(llm_request.contents) == 6
   assert llm_request.contents[0].parts[0].text == "user_prompt_3"
   assert llm_request.contents[1].parts[0].text == "model_response_3"
