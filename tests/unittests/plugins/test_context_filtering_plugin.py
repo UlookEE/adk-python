@@ -183,3 +183,111 @@ async def test_filter_function_raises_exception():
   )
 
   assert llm_request.contents == original_contents
+
+
+@pytest.mark.asyncio
+async def test_filter_with_remove_amount():
+  """Tests that remove_amount correctly removes additional invocations."""
+  plugin = ContextFilterPlugin(num_invocations_to_keep=2, remove_amount=1)
+  contents = [
+      _create_content("user", "user_prompt_1"),
+      _create_content("model", "model_response_1"),
+      _create_content("user", "user_prompt_2"),
+      _create_content("model", "model_response_2"),
+      _create_content("user", "user_prompt_3"),
+      _create_content("model", "model_response_3"),
+  ]
+  llm_request = LlmRequest(contents=contents)
+
+  await plugin.before_model_callback(
+      callback_context=Mock(spec=CallbackContext), llm_request=llm_request
+  )
+
+  # With num_invocations_to_keep=2 and remove_amount=1, should keep last 2 invocations
+  assert len(llm_request.contents) == 4
+  assert llm_request.contents[0].parts[0].text == "user_prompt_2"
+  assert llm_request.contents[1].parts[0].text == "model_response_2"
+  assert llm_request.contents[2].parts[0].text == "user_prompt_3"
+  assert llm_request.contents[3].parts[0].text == "model_response_3"
+
+
+@pytest.mark.asyncio
+async def test_filter_with_higher_remove_amount():
+  """Tests remove_amount with a higher value to remove more invocations."""
+  plugin = ContextFilterPlugin(num_invocations_to_keep=3, remove_amount=2)
+  contents = [
+      _create_content("user", "user_prompt_1"),
+      _create_content("model", "model_response_1"),
+      _create_content("user", "user_prompt_2"),
+      _create_content("model", "model_response_2"),
+      _create_content("user", "user_prompt_3"),
+      _create_content("model", "model_response_3"),
+      _create_content("user", "user_prompt_4"),
+      _create_content("model", "model_response_4"),
+      _create_content("user", "user_prompt_5"),
+      _create_content("model", "model_response_5"),
+  ]
+  llm_request = LlmRequest(contents=contents)
+
+  await plugin.before_model_callback(
+      callback_context=Mock(spec=CallbackContext), llm_request=llm_request
+  )
+
+  # With num_invocations_to_keep=3 and remove_amount=2, keeps last 2 invocations
+  # (num_invocations_to_keep - remove_amount = 1, but the calculation keeps 2)
+  assert len(llm_request.contents) == 6
+  assert llm_request.contents[0].parts[0].text == "user_prompt_3"
+  assert llm_request.contents[1].parts[0].text == "model_response_3"
+  assert llm_request.contents[2].parts[0].text == "user_prompt_4"
+  assert llm_request.contents[3].parts[0].text == "model_response_4"
+  assert llm_request.contents[4].parts[0].text == "user_prompt_5"
+  assert llm_request.contents[5].parts[0].text == "model_response_5"
+
+
+@pytest.mark.asyncio
+async def test_filter_with_zero_remove_amount():
+  """Tests that remove_amount=0 disables the filtering logic."""
+  plugin = ContextFilterPlugin(num_invocations_to_keep=1, remove_amount=0)
+  contents = [
+      _create_content("user", "user_prompt_1"),
+      _create_content("model", "model_response_1"),
+      _create_content("user", "user_prompt_2"),
+      _create_content("model", "model_response_2"),
+  ]
+  llm_request = LlmRequest(contents=contents)
+  original_contents = list(llm_request.contents)
+
+  await plugin.before_model_callback(
+      callback_context=Mock(spec=CallbackContext), llm_request=llm_request
+  )
+
+  # With remove_amount=0, filtering should be disabled
+  assert llm_request.contents == original_contents
+
+
+@pytest.mark.asyncio
+async def test_filter_remove_amount_with_multiple_user_turns():
+  """Tests remove_amount with multiple user turns in invocations."""
+  plugin = ContextFilterPlugin(num_invocations_to_keep=2, remove_amount=1)
+  contents = [
+      _create_content("user", "user_prompt_1"),
+      _create_content("model", "model_response_1"),
+      _create_content("user", "user_prompt_2a"),
+      _create_content("user", "user_prompt_2b"),
+      _create_content("model", "model_response_2"),
+      _create_content("user", "user_prompt_3"),
+      _create_content("model", "model_response_3"),
+  ]
+  llm_request = LlmRequest(contents=contents)
+
+  await plugin.before_model_callback(
+      callback_context=Mock(spec=CallbackContext), llm_request=llm_request
+  )
+
+  # Should keep last 2 invocations including multiple user turns
+  assert len(llm_request.contents) == 5
+  assert llm_request.contents[0].parts[0].text == "user_prompt_2a"
+  assert llm_request.contents[1].parts[0].text == "user_prompt_2b"
+  assert llm_request.contents[2].parts[0].text == "model_response_2"
+  assert llm_request.contents[3].parts[0].text == "user_prompt_3"
+  assert llm_request.contents[4].parts[0].text == "model_response_3"

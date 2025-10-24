@@ -36,6 +36,8 @@ class ContextFilterPlugin(BasePlugin):
       num_invocations_to_keep: Optional[int] = None,
       custom_filter: Optional[Callable[[List[Event]], List[Event]]] = None,
       name: str = "context_filter_plugin",
+      remove_amount: int = 1
+
   ):
     """Initializes the context management plugin.
 
@@ -45,10 +47,12 @@ class ContextFilterPlugin(BasePlugin):
         by a model response.
       custom_filter: A function to filter the context.
       name: The name of the plugin instance.
+      remove_amount: The amount to remove the context.
     """
     super().__init__(name)
     self._num_invocations_to_keep = num_invocations_to_keep
     self._custom_filter = custom_filter
+    self._remove_amount = remove_amount
 
   async def before_model_callback(
       self, *, callback_context: CallbackContext, llm_request: LlmRequest
@@ -60,9 +64,10 @@ class ContextFilterPlugin(BasePlugin):
       if (
           self._num_invocations_to_keep is not None
           and self._num_invocations_to_keep > 0
+          and self._remove_amount > 0
       ):
         num_model_turns = sum(1 for c in contents if c.role == "model")
-        if num_model_turns >= self._num_invocations_to_keep:
+        if num_model_turns >= self._num_invocations_to_keep + self._remove_amount - 1:
           model_turns_to_find = self._num_invocations_to_keep
           split_index = 0
           for i in range(len(contents) - 1, -1, -1):
