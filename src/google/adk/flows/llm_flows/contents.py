@@ -725,9 +725,6 @@ def _is_valid_instruction_position(llm_request: LlmRequest, index: int) -> bool:
   """
   user_message = llm_request.contents[index].role == 'user'
   tool_request = False
-  for part in llm_request.contents[index].parts:
-    if part.function_call:
-      tool_request = True
-      break
+  tool_request = any(part.function_call for part in llm_request.contents[index].parts)
   
   return not user_message and not tool_request
